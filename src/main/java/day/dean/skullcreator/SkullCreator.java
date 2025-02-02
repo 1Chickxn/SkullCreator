@@ -1,9 +1,5 @@
 package day.dean.skullcreator;
 
-// Copyright (c) 2017 deanveloper (see LICENSE.md for more info)
-
-import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.properties.Property;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.SkullType;
@@ -11,12 +7,13 @@ import org.bukkit.block.Block;
 import org.bukkit.block.Skull;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.profile.PlayerProfile;
+import org.bukkit.profile.PlayerTextures;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -24,32 +21,20 @@ import java.util.UUID;
  * A library for the Bukkit API to create player skulls
  * from names, base64 strings, and texture URLs.
  * <p>
- * Does not use any NMS code, and should work across all versions.
+ * Uses the new PlayerProfile API introduced in Minecraft 1.20.5.
  *
  * @author deanveloper on 12/28/2016.
+ * @modified for 1.20.5+ compatibility.
  */
 public class SkullCreator {
 
 	private SkullCreator() {}
 
-	private static boolean warningPosted = false;
-
-	// some reflection stuff to be used when setting a skull's profile
-	private static Field blockProfileField;
-	private static Method metaSetProfileMethod;
-	private static Field metaProfileField;
-
 	/**
 	 * Creates a player skull, should work in both legacy and new Bukkit APIs.
 	 */
 	public static ItemStack createSkull() {
-		checkLegacy();
-
-		try {
-			return new ItemStack(Material.valueOf("PLAYER_HEAD"));
-		} catch (IllegalArgumentException e) {
-			return new ItemStack(Material.valueOf("SKULL_ITEM"), 1, (byte) 3);
-		}
+		return new ItemStack(Material.PLAYER_HEAD);
 	}
 
 	/**
@@ -59,6 +44,7 @@ public class SkullCreator {
 	 * @return The head of the Player.
 	 * @deprecated names don't make for good identifiers.
 	 */
+	@Deprecated
 	public static ItemStack itemFromName(String name) {
 		return itemWithName(createSkull(), name);
 	}
@@ -160,7 +146,9 @@ public class SkullCreator {
 			return null;
 		}
 		SkullMeta meta = (SkullMeta) item.getItemMeta();
-		mutateItemMeta(meta, base64);
+		PlayerProfile profile = createProfile(base64);
+
+		meta.setOwnerProfile(profile);
 		item.setItemMeta(meta);
 
 		return item;
@@ -224,21 +212,13 @@ public class SkullCreator {
 
 		setToSkull(block);
 		Skull state = (Skull) block.getState();
-		mutateBlockState(state, base64);
+		PlayerProfile profile = createProfile(base64);
+		state.setOwnerProfile(profile);
 		state.update(false, false);
 	}
 
 	private static void setToSkull(Block block) {
-		checkLegacy();
-
-		try {
-			block.setType(Material.valueOf("PLAYER_HEAD"), false);
-		} catch (IllegalArgumentException e) {
-			block.setType(Material.valueOf("SKULL"), false);
-			Skull state = (Skull) block.getState();
-			state.setSkullType(SkullType.PLAYER);
-			state.update(false, false);
-		}
+		block.setType(Material.PLAYER_HEAD, false);
 	}
 
 	private static void notNull(Object o, String name) {
@@ -248,7 +228,6 @@ public class SkullCreator {
 	}
 
 	private static String urlToBase64(String url) {
-
 		URI actualUrl;
 		try {
 			actualUrl = new URI(url);
@@ -259,66 +238,17 @@ public class SkullCreator {
 		return Base64.getEncoder().encodeToString(toEncode.getBytes());
 	}
 
-	private static GameProfile makeProfile(String b64) {
-		// random uuid based on the b64 string
-		UUID id = new UUID(
-				b64.substring(b64.length() - 20).hashCode(),
-				b64.substring(b64.length() - 10).hashCode()
-		);
-		GameProfile profile = new GameProfile(id, "Player");
-		profile.getProperties().put("textures", new Property("textures", b64));
-		return profile;
-	}
-
-	private static void mutateBlockState(Skull block, String b64) {
+	private static PlayerProfile createProfile(String base64) {
+		PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());
+		PlayerTextures textures = profile.getTextures();
 		try {
-			if (blockProfileField == null) {
-				blockProfileField = block.getClass().getDeclaredField("profile");
-				blockProfileField.setAccessible(true);
-			}
-			blockProfileField.set(block, makeProfile(b64));
-		} catch (NoSuchFieldException | IllegalAccessException e) {
+			String url = new String(Base64.getDecoder().decode(base64));
+			String skinUrl = url.split("\"url\":\"")[1].split("\"")[0];
+			textures.setSkin(new URL(skinUrl));
+			profile.setTextures(textures);
+		} catch (MalformedURLException e) {
 			e.printStackTrace();
 		}
-	}
-
-	private static void mutateItemMeta(SkullMeta meta, String b64) {
-		try {
-			if (metaSetProfileMethod == null) {
-				metaSetProfileMethod = meta.getClass().getDeclaredMethod("setProfile", GameProfile.class);
-				metaSetProfileMethod.setAccessible(true);
-			}
-			metaSetProfileMethod.invoke(meta, makeProfile(b64));
-		} catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ex) {
-			// if in an older API where there is no setProfile method,
-			// we set the profile field directly.
-			try {
-				if (metaProfileField == null) {
-					metaProfileField = meta.getClass().getDeclaredField("profile");
-					metaProfileField.setAccessible(true);
-				}
-				metaProfileField.set(meta, makeProfile(b64));
-
-			} catch (NoSuchFieldException | IllegalAccessException ex2) {
-				ex2.printStackTrace();
-			}
-		}
-	}
-
-	// suppress warning since PLAYER_HEAD doesn't exist in 1.12.2,
-	// but we expect this and catch the error at runtime.
-	@SuppressWarnings("JavaReflectionMemberAccess")
-	private static void checkLegacy() {
-		try {
-			// if both of these succeed, then we are running
-			// in a legacy api, but on a modern (1.13+) server.
-			Material.class.getDeclaredField("PLAYER_HEAD");
-			Material.valueOf("SKULL");
-
-			if (!warningPosted) {
-				Bukkit.getLogger().warning("SKULLCREATOR API - Using the legacy bukkit API with 1.13+ bukkit versions is not supported!");
-				warningPosted = true;
-			}
-		} catch (NoSuchFieldException | IllegalArgumentException ignored) {}
+		return profile;
 	}
 }

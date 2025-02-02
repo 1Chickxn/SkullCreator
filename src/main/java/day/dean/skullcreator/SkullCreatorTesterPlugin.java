@@ -16,23 +16,36 @@ public class SkullCreatorTesterPlugin extends JavaPlugin {
 
 	@Override
 	public void onEnable() {
-		if (!getDescription().getVersion().endsWith("SNAPSHOT")) {
-			throw new IllegalStateException("This is not intended to run as a plugin!");
-		} else {
-			Bukkit.getLogger().info("Loaded!");
-		}
+		// Entferne die Überprüfung, um das Plugin ausführen zu können
+		Bukkit.getLogger().info("SkullCreatorTesterPlugin loaded!");
 	}
 
 	@Override
 	public boolean onCommand(CommandSender sender, Command command, String lbl, String[] args) {
+		if (!(sender instanceof Player)) {
+			sender.sendMessage("This command can only be executed by a player.");
+			return false;
+		}
+
 		Player p = (Player) sender;
 
+		if (args.length == 0) {
+			p.sendMessage("Usage: /skulltest <item|block>");
+			return false;
+		}
+
 		if (args[0].equals("item")) {
-			p.getInventory().setItemInMainHand(
-					SkullCreator.itemWithBase64(SkullCreator.createSkull(), TEST_SKULL)
-			);
+			// Erstellt einen benutzerdefinierten Kopf mit einer URL
+			ItemStack skull = SkullCreator.itemFromUrl("http://textures.minecraft.net/texture/de48039e196d03ceff62fe97684e712f8d31b6e7b1a6cb1c955a86755b847b17");
+			p.getInventory().setItemInMainHand(skull);
+			p.sendMessage("Custom skull item created and added to your hand!");
 		} else if (args[0].equals("block")) {
+			// Setzt einen benutzerdefinierten Kopf als Block
 			SkullCreator.blockWithBase64(p.getLocation().getBlock(), TEST_SKULL);
+			p.sendMessage("Custom skull block placed at your location!");
+		} else {
+			p.sendMessage("Invalid argument. Usage: /skulltest <item|block>");
+			return false;
 		}
 
 		return true;
