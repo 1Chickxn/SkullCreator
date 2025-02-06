@@ -1,5 +1,6 @@
 package day.dean.skullcreator;
 
+import com.google.gson.JsonParser;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.SkullType;
@@ -10,10 +11,9 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.profile.PlayerTextures;
 
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.*;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -110,145 +110,181 @@ public class SkullCreator {
 		notNull(item, "item");
 		notNull(id, "id");
 
+		try {
+			URL url = new URL("https://sessionserver.mojang.com/session/minecraft/profile/" + id.toString().replace("-", ""));
+			HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+			conn.setRequestMethod("GET");
+
+			if (conn.getResponseCode() == 200) {
+				BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+				String json = reader.lines().reduce("", (a, b) -> a + b);
+
+				// JSON parsing
+				String base64 = new JsonParser()
+						.parse(json)
+						.getAsJsonObject()
+						.get("properties")
+						.getAsJsonArray()
+						.get(0)
+						.getAsJsonObject()
+						.get("value")
+						.getAsString();
+
+				String decoded = new String(Base64.getDecoder().decode(base64));
+				String skinUrl = new JsonParser()
+						.parse(decoded)
+						.getAsJsonObject()
+						.get("textures")
+						.getAsJsonObject()
+						.get("SKIN")
+						.getAsJsonObject()
+						.get("url")
+						.getAsString();
+
+				return itemWithUrl(item, skinUrl);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		SkullMeta meta = (SkullMeta) item.getItemMeta();
 		meta.setOwningPlayer(Bukkit.getOfflinePlayer(id));
 		item.setItemMeta(meta);
-
 		return item;
 	}
 
-	/**
-	 * Modifies a skull to use the skin at the given Mojang URL.
-	 *
-	 * @param item The item to apply the skin to. Must be a player skull.
-	 * @param url  The URL of the Mojang skin.
-	 * @return The head associated with the URL.
-	 */
-	public static ItemStack itemWithUrl(ItemStack item, String url) {
-		notNull(item, "item");
-		notNull(url, "url");
+    /**
+     * Modifies a skull to use the skin at the given Mojang URL.
+     *
+     * @param item The item to apply the skin to. Must be a player skull.
+     * @param url  The URL of the Mojang skin.
+     * @return The head associated with the URL.
+     */
+    public static ItemStack itemWithUrl(ItemStack item, String url) {
+        notNull(item, "item");
+        notNull(url, "url");
 
-		return itemWithBase64(item, urlToBase64(url));
-	}
+        return itemWithBase64(item, urlToBase64(url));
+    }
 
-	/**
-	 * Modifies a skull to use the skin based on the given base64 string.
-	 *
-	 * @param item   The ItemStack to put the base64 onto. Must be a player skull.
-	 * @param base64 The base64 string containing the texture.
-	 * @return The head with a custom texture.
-	 */
-	public static ItemStack itemWithBase64(ItemStack item, String base64) {
-		notNull(item, "item");
-		notNull(base64, "base64");
+    /**
+     * Modifies a skull to use the skin based on the given base64 string.
+     *
+     * @param item   The ItemStack to put the base64 onto. Must be a player skull.
+     * @param base64 The base64 string containing the texture.
+     * @return The head with a custom texture.
+     */
+    public static ItemStack itemWithBase64(ItemStack item, String base64) {
+        notNull(item, "item");
+        notNull(base64, "base64");
 
-		if (!(item.getItemMeta() instanceof SkullMeta)) {
-			return null;
-		}
-		SkullMeta meta = (SkullMeta) item.getItemMeta();
-		PlayerProfile profile = createProfile(base64);
+        if (!(item.getItemMeta() instanceof SkullMeta)) {
+            return null;
+        }
+        SkullMeta meta = (SkullMeta) item.getItemMeta();
+        PlayerProfile profile = createProfile(base64);
 
-		meta.setOwnerProfile(profile);
-		item.setItemMeta(meta);
+        meta.setOwnerProfile(profile);
+        item.setItemMeta(meta);
 
-		return item;
-	}
+        return item;
+    }
 
-	/**
-	 * Sets the block to a skull with the given name.
-	 *
-	 * @param block The block to set.
-	 * @param name  The player to set it to.
-	 * @deprecated names don't make for good identifiers.
-	 */
-	@Deprecated
-	public static void blockWithName(Block block, String name) {
-		notNull(block, "block");
-		notNull(name, "name");
+    /**
+     * Sets the block to a skull with the given name.
+     *
+     * @param block The block to set.
+     * @param name  The player to set it to.
+     * @deprecated names don't make for good identifiers.
+     */
+    @Deprecated
+    public static void blockWithName(Block block, String name) {
+        notNull(block, "block");
+        notNull(name, "name");
 
-		Skull state = (Skull) block.getState();
-		state.setOwningPlayer(Bukkit.getOfflinePlayer(name));
-		state.update(false, false);
-	}
+        Skull state = (Skull) block.getState();
+        state.setOwningPlayer(Bukkit.getOfflinePlayer(name));
+        state.update(false, false);
+    }
 
-	/**
-	 * Sets the block to a skull with the given UUID.
-	 *
-	 * @param block The block to set.
-	 * @param id    The player to set it to.
-	 */
-	public static void blockWithUuid(Block block, UUID id) {
-		notNull(block, "block");
-		notNull(id, "id");
+    /**
+     * Sets the block to a skull with the given UUID.
+     *
+     * @param block The block to set.
+     * @param id    The player to set it to.
+     */
+    public static void blockWithUuid(Block block, UUID id) {
+        notNull(block, "block");
+        notNull(id, "id");
 
-		setToSkull(block);
-		Skull state = (Skull) block.getState();
-		state.setOwningPlayer(Bukkit.getOfflinePlayer(id));
-		state.update(false, false);
-	}
+        setToSkull(block);
+        Skull state = (Skull) block.getState();
+        state.setOwningPlayer(Bukkit.getOfflinePlayer(id));
+        state.update(false, false);
+    }
 
-	/**
-	 * Sets the block to a skull with the skin found at the provided mojang URL.
-	 *
-	 * @param block The block to set.
-	 * @param url   The mojang URL to set it to use.
-	 */
-	public static void blockWithUrl(Block block, String url) {
-		notNull(block, "block");
-		notNull(url, "url");
+    /**
+     * Sets the block to a skull with the skin found at the provided mojang URL.
+     *
+     * @param block The block to set.
+     * @param url   The mojang URL to set it to use.
+     */
+    public static void blockWithUrl(Block block, String url) {
+        notNull(block, "block");
+        notNull(url, "url");
 
-		blockWithBase64(block, urlToBase64(url));
-	}
+        blockWithBase64(block, urlToBase64(url));
+    }
 
-	/**
-	 * Sets the block to a skull with the skin for the base64 string.
-	 *
-	 * @param block  The block to set.
-	 * @param base64 The base64 to set it to use.
-	 */
-	public static void blockWithBase64(Block block, String base64) {
-		notNull(block, "block");
-		notNull(base64, "base64");
+    /**
+     * Sets the block to a skull with the skin for the base64 string.
+     *
+     * @param block  The block to set.
+     * @param base64 The base64 to set it to use.
+     */
+    public static void blockWithBase64(Block block, String base64) {
+        notNull(block, "block");
+        notNull(base64, "base64");
 
-		setToSkull(block);
-		Skull state = (Skull) block.getState();
-		PlayerProfile profile = createProfile(base64);
-		state.setOwnerProfile(profile);
-		state.update(false, false);
-	}
+        setToSkull(block);
+        Skull state = (Skull) block.getState();
+        PlayerProfile profile = createProfile(base64);
+        state.setOwnerProfile(profile);
+        state.update(false, false);
+    }
 
-	private static void setToSkull(Block block) {
-		block.setType(Material.PLAYER_HEAD, false);
-	}
+    private static void setToSkull(Block block) {
+        block.setType(Material.PLAYER_HEAD, false);
+    }
 
-	private static void notNull(Object o, String name) {
-		if (o == null) {
-			throw new NullPointerException(name + " should not be null!");
-		}
-	}
+    private static void notNull(Object o, String name) {
+        if (o == null) {
+            throw new NullPointerException(name + " should not be null!");
+        }
+    }
 
-	private static String urlToBase64(String url) {
-		URI actualUrl;
-		try {
-			actualUrl = new URI(url);
-		} catch (URISyntaxException e) {
-			throw new RuntimeException(e);
-		}
-		String toEncode = "{\"textures\":{\"SKIN\":{\"url\":\"" + actualUrl.toString() + "\"}}}";
-		return Base64.getEncoder().encodeToString(toEncode.getBytes());
-	}
+    private static String urlToBase64(String url) {
+        URI actualUrl;
+        try {
+            actualUrl = new URI(url);
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+        String toEncode = "{\"textures\":{\"SKIN\":{\"url\":\"" + actualUrl.toString() + "\"}}}";
+        return Base64.getEncoder().encodeToString(toEncode.getBytes());
+    }
 
-	private static PlayerProfile createProfile(String base64) {
-		PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());
-		PlayerTextures textures = profile.getTextures();
-		try {
-			String url = new String(Base64.getDecoder().decode(base64));
-			String skinUrl = url.split("\"url\":\"")[1].split("\"")[0];
-			textures.setSkin(new URL(skinUrl));
-			profile.setTextures(textures);
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
-		}
-		return profile;
-	}
+    private static PlayerProfile createProfile(String base64) {
+        PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());
+        PlayerTextures textures = profile.getTextures();
+        try {
+            String url = new String(Base64.getDecoder().decode(base64));
+            String skinUrl = url.split("\"url\":\"")[1].split("\"")[0];
+            textures.setSkin(new URL(skinUrl));
+            profile.setTextures(textures);
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        }
+        return profile;
+    }
 }
+
