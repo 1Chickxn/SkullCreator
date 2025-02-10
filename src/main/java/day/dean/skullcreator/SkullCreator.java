@@ -1,5 +1,6 @@
 package day.dean.skullcreator;
 
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -15,6 +16,7 @@ import java.io.InputStreamReader;
 import java.net.*;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * A library for the Bukkit API to create player skulls
@@ -54,9 +56,6 @@ public class SkullCreator {
 	 * @param id The Player's UUID.
 	 * @return The head of the Player.
 	 */
-	public static ItemStack itemFromUuid(UUID id) {
-		return itemWithUuid(createSkull(), id);
-	}
 
 	/**
 	 * Creates a player skull item with the skin at a Mojang URL.
@@ -105,53 +104,51 @@ public class SkullCreator {
 	 * @param id   The Player's UUID.
 	 * @return The head of the Player.
 	 */
-	public static ItemStack itemWithUuid(ItemStack item, UUID id) {
-		notNull(item, "item");
+	public static void itemFromUuid(UUID id, Consumer<ItemStack> callback) {
 		notNull(id, "id");
 
-		try {
-			URL url = new URL("https://sessionserver.mojang.com/session/minecraft/profile/" + id.toString().replace("-", ""));
-			HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-			conn.setRequestMethod("GET");
+		new Thread(() -> {
+			try {
+				URL url = new URL("https://sessionserver.mojang.com/session/minecraft/profile/" + id.toString().replace("-", ""));
+				HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+				conn.setRequestMethod("GET");
 
-			if (conn.getResponseCode() == 200) {
-				BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-				String json = reader.lines().reduce("", (a, b) -> a + b);
+				if (conn.getResponseCode() == 200) {
+					BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+					String json = reader.lines().reduce("", (a, b) -> a + b);
+					reader.close();
 
-				// JSON parsing
-				String base64 = new JsonParser()
-						.parse(json)
-						.getAsJsonObject()
-						.get("properties")
-						.getAsJsonArray()
-						.get(0)
-						.getAsJsonObject()
-						.get("value")
-						.getAsString();
+					JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
+					String base64 = jsonObject.getAsJsonArray("properties").get(0)
+							.getAsJsonObject().get("value").getAsString();
 
-				String decoded = new String(Base64.getDecoder().decode(base64));
-				String skinUrl = new JsonParser()
-						.parse(decoded)
-						.getAsJsonObject()
-						.get("textures")
-						.getAsJsonObject()
-						.get("SKIN")
-						.getAsJsonObject()
-						.get("url")
-						.getAsString();
+					String decoded = new String(Base64.getDecoder().decode(base64));
+					JsonObject textureObject = JsonParser.parseString(decoded).getAsJsonObject()
+							.getAsJsonObject("textures").getAsJsonObject("SKIN");
 
-				return itemWithUrl(item, skinUrl);
+					if (textureObject.has("url")) {
+						String skinUrl = textureObject.getAsJsonObject().get("url").getAsString();
+						ItemStack skull = itemWithUrl(createSkull(), skinUrl);
+						callback.accept(skull);
+						return;
+					}
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		SkullMeta meta = (SkullMeta) item.getItemMeta();
-		meta.setOwningPlayer(Bukkit.getOfflinePlayer(id));
-		item.setItemMeta(meta);
-		return item;
+
+			// Falls API nicht funktioniert, nutze den lokalen Bukkit-Spieler
+			ItemStack skull = createSkull();
+			SkullMeta meta = (SkullMeta) skull.getItemMeta();
+			meta.setOwningPlayer(Bukkit.getOfflinePlayer(id));
+			skull.setItemMeta(meta);
+			callback.accept(skull);
+		}).start();
 	}
 
-    /**
+
+
+	/**
      * Modifies a skull to use the skin at the given Mojang URL.
      *
      * @param item The item to apply the skin to. Must be a player skull.
