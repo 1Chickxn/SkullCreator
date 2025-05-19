@@ -4,7 +4,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.block.Block;
 import org.bukkit.block.Skull;
 import org.bukkit.inventory.ItemStack;
@@ -49,7 +48,7 @@ public class SkullCreator {
 	 */
 	@Deprecated
 	public static ItemStack itemFromName(String name) {
-		return itemWithName(createSkull(), name);
+		return itemWithName(name);
 	}
 
 	/**
@@ -82,27 +81,31 @@ public class SkullCreator {
 	/**
 	 * Modifies a skull to use the skin of the player with a given name.
 	 *
-	 * @param item The item to apply the name to. Must be a player skull.
 	 * @param name The Player's name.
 	 * @return The head of the Player.
 	 * @deprecated names don't make for good identifiers.
 	 */
-
-	public static ItemStack itemWithName(ItemStack item, String name) {
-		Objects.requireNonNull(item, "item");
+	@Deprecated
+	public static ItemStack itemWithName(String name) {
 		Objects.requireNonNull(name, "name");
+		PlayerProfile profile = Bukkit.createPlayerProfile(name);
+
+		ItemStack item = new ItemStack(Material.PLAYER_HEAD);
 
 		SkullMeta meta = (SkullMeta) item.getItemMeta();
-
-		OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
-		meta.setOwningPlayer(offline);
-
+		meta.setOwnerProfile(profile);
 		item.setItemMeta(meta);
+
 		return item;
 	}
 
-
-
+	/**
+	 * Modifies a skull to use the skin of the player with a given UUID.
+	 *
+	 * @param callback The item to apply the name to. Must be a player skull.
+	 * @param id   The Player's UUID.
+	 * @return The head of the Player.
+	 */
 	public static void itemFromUuid(UUID id, Consumer<ItemStack> callback) {
 		notNull(id, "id");
 
@@ -135,6 +138,8 @@ public class SkullCreator {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
+
+			// Falls API nicht funktioniert, nutze den lokalen Bukkit-Spieler
 			ItemStack skull = createSkull();
 			SkullMeta meta = (SkullMeta) skull.getItemMeta();
 			meta.setOwningPlayer(Bukkit.getOfflinePlayer(id));
