@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.block.Block;
 import org.bukkit.block.Skull;
 import org.bukkit.inventory.ItemStack;
@@ -15,6 +16,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.*;
 import java.util.Base64;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -85,25 +87,22 @@ public class SkullCreator {
 	 * @return The head of the Player.
 	 * @deprecated names don't make for good identifiers.
 	 */
-	@Deprecated
+
 	public static ItemStack itemWithName(ItemStack item, String name) {
-		notNull(item, "item");
-		notNull(name, "name");
+		Objects.requireNonNull(item, "item");
+		Objects.requireNonNull(name, "name");
 
 		SkullMeta meta = (SkullMeta) item.getItemMeta();
-		meta.setOwner(name);
-		item.setItemMeta(meta);
 
+		OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
+		meta.setOwningPlayer(offline);
+
+		item.setItemMeta(meta);
 		return item;
 	}
 
-	/**
-	 * Modifies a skull to use the skin of the player with a given UUID.
-	 *
-	 * @param item The item to apply the name to. Must be a player skull.
-	 * @param id   The Player's UUID.
-	 * @return The head of the Player.
-	 */
+
+
 	public static void itemFromUuid(UUID id, Consumer<ItemStack> callback) {
 		notNull(id, "id");
 
@@ -136,8 +135,6 @@ public class SkullCreator {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-
-			// Falls API nicht funktioniert, nutze den lokalen Bukkit-Spieler
 			ItemStack skull = createSkull();
 			SkullMeta meta = (SkullMeta) skull.getItemMeta();
 			meta.setOwningPlayer(Bukkit.getOfflinePlayer(id));
